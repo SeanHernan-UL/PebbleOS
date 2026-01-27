@@ -60,6 +60,7 @@ def main():
     res_parser.set_defaults(func=load_resources)
 
     args = parser.parse_args()
+    print(args)
 
     if args.verbose:
         logging.basicConfig(level=logging.DEBUG)

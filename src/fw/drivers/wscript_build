@@ -952,7 +952,7 @@ elif bld.is_hollow():
             'flash/flash_crc.c',
             'flash/flash_erase.c',
             'flash/cd_flash_driver.c',
-            'flash/gd25lq255e.c',
+            'flash/mx25r6435f.c',
         ],
         use=[
             'driver_qspi',

@@ -88,6 +88,7 @@ def build(bld):
         micro_includes = [
 	    '.',
             'nrfx',
+            'nrfx/bsp/stable',
             'nrfx/hal',
             'nrfx/helpers',
             'nrfx/mdk',

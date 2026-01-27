@@ -38,8 +38,8 @@ static QSPIPort QSPI_PORT = {
         {
             NRF_GPIO_PIN_MAP(0, 13),
             NRF_GPIO_PIN_MAP(0, 14),
-            NRF_GPIO_PIN_MAP(0, 15),
-            NRF_GPIO_PIN_MAP(0, 16),
+            NRF_QSPI_PIN_NOT_CONNECTED,
+            NRF_QSPI_PIN_NOT_CONNECTED,
         },
 };
 QSPIPort *const QSPI = &QSPI_PORT;
@@ -49,8 +49,8 @@ static QSPIFlash QSPI_FLASH_DEVICE = {
     .state = &s_qspi_flash_state,
     .qspi = &QSPI_PORT,
     .default_fast_read_ddr_enabled = false,
-    .read_mode = QSPI_FLASH_READ_READ4IO,
-    .write_mode = QSPI_FLASH_WRITE_PP4O,
+    .read_mode = QSPI_FLASH_READ_FASTREAD,
+    .write_mode = QSPI_FLASH_WRITE_PP,
     .reset_gpio = {GPIO_Port_NULL},
 };
 QSPIFlash *const QSPI_FLASH = &QSPI_FLASH_DEVICE;
@@ -60,8 +60,8 @@ IRQ_MAP_NRFX(QSPI, nrfx_qspi_irq_handler);
 static UARTDeviceState s_dbg_uart_state;
 static UARTDevice DBG_UART_DEVICE = {
     .state = &s_dbg_uart_state,
-    .tx_gpio = NRF_GPIO_PIN_MAP(0, 9),
-    .rx_gpio = NRF_GPIO_PIN_MAP(0, 10),
+    .tx_gpio = NRF_GPIO_PIN_MAP(0, 11),
+    .rx_gpio = NRF_GPIO_PIN_MAP(0, 12),
     .rts_gpio = NRF_UARTE_PSEL_DISCONNECTED,
     .cts_gpio = NRF_UARTE_PSEL_DISCONNECTED,
     .periph = NRFX_UARTE_INSTANCE(0),
@@ -82,7 +82,7 @@ IRQ_MAP_NRFX(TIMER2, nrfx_timer_2_irq_handler);
 /* PERIPHERAL ID 10 */
 
 /* EXTI */
-// IRQ_MAP_NRFX(SPIM4, nrfx_gpiote_0_irq_handler);
+IRQ_MAP_NRFX(SPIM4, nrfx_gpiote_0_irq_handler);
 
 /* nPM1300 */
 // static I2CBusState I2C_NPMC_IIC1_BUS_STATE = {};

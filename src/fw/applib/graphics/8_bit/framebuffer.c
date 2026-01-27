@@ -48,7 +48,7 @@ inline size_t framebuffer_get_size_bytes(FrameBuffer *f) {
   // TODO: Make FRAMEBUFFER_SIZE_BYTES a macro which takes the cols and rows if we ever want
   // to support different size framebuffers for round displays or other displays where the 8-bit
   // framebuffer size is not just COLS * ROWS.
-#if PLATFORM_SPALDING
+#if PLATFORM_SPALDING || PLATFORM_HOLLOW
   return FRAMEBUFFER_SIZE_BYTES;
 #else
   return (size_t)f->size.w * (size_t)f->size.h;

@@ -56,6 +56,9 @@
 #ifndef FREERTOS_CONFIG_H
 #define FREERTOS_CONFIG_H
 
+// probably bad practice, but might make it work?
+#define configRUN_FREERTOS_SECURE_ONLY    1
+
 /*-----------------------------------------------------------
  * Application specific definitions.
  *

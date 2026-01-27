@@ -23,7 +23,7 @@ static const BoardConfig BOARD_CONFIG = {
   .dbgserial_int = {
     .peripheral = NRFX_GPIOTE_INSTANCE(0), 
     .channel = 0,
-    .gpio_pin = NRF_GPIO_PIN_MAP(0, 8),
+    .gpio_pin = NRF_GPIO_PIN_MAP(0, 10),
   },
 
   .has_mic = true,

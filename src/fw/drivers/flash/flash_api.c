@@ -521,7 +521,7 @@ void flash_erase_bulk(void) {
 }
 #endif
 
-void flash_sleep_when_idle(bool enable) {
+void flash_sleep_when_idle(bool enable) { // TODO implement??
   // the S29VS flash automatically enters and exits standby
 }
 

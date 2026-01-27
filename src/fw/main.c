@@ -270,6 +270,12 @@ int main(void) {
   periph_config_disable(PWR, RCC_APB1Periph_PWR);
 #endif
 
+#if defined(MICRO_FAMILY_NRF5340)
+  // enable interrupts so svc call can run...
+  // probably needed due to mcuboot end state
+  	__enable_irq();
+#endif
+
   vTaskStartScheduler();
   for(;;);
 }

@@ -20,6 +20,7 @@
 #define NRF5_COMPATIBLE
 #include <mcu.h>
 #include <nrfx.h>
+#include "nrfx/hal/nrf_clock.h"
 #include <nrfx_qspi.h>
 
 #include "FreeRTOS.h"
@@ -43,11 +44,142 @@ status_t flash_impl_get_nvram_erase_status(bool *is_subsector, FlashAddress *add
   return S_FALSE;
 }
 
+// only valid option with anomaly 159
+#define BASE_CLOCK_DIV NRF_CLOCK_HFCLK_DIV_1
+#define BASE_CLOCK_SWITCH_DELAY_US 7
+
+// borrowing from zephyrproject/zephyr/drivers/flash/nrf_qspi_nor.c
+// FIXME: tempfix to get working now, should probably review...
+// also modified...
+static inline void qspi_clock_div_change(nrf_clock_hfclk_div_t *dev)
+{
+#ifdef MICRO_FAMILY_NRF5340
+#if NRF53_ERRATA_159_ENABLE_WORKAROUND
+	if (nrf53_errata_159()) {
+		/* Save current hfclk configuration */
+		*dev = nrf_clock_hfclk_div_get(NRF_CLOCK);
+		nrf_clock_hfclk_div_set(NRF_CLOCK, NRF_CLOCK_HFCLK_DIV_2);
+	}
+#endif
+	/* Make sure the base clock divider is changed accordingly
+	 * before a QSPI transfer is performed.
+	 */
+	nrf_clock_hfclk192m_div_set(NRF_CLOCK, BASE_CLOCK_DIV);
+	delay_us(BASE_CLOCK_SWITCH_DELAY_US); // wait 7 us
+#endif
+}
+
+// borrowing from zephyrproject/zephyr/drivers/flash/nrf_qspi_nor.c
+// FIXME: tempfix to get working now, should probably review...
+// also modified...
+static inline void qspi_clock_div_restore(nrf_clock_hfclk_div_t *dev)
+{
+#ifdef MICRO_FAMILY_NRF5340
+	/* Restore the default base clock divider to reduce power
+	 * consumption when the QSPI peripheral is idle.
+	 */
+	nrf_clock_hfclk192m_div_set(NRF_CLOCK, NRF_CLOCK_HFCLK_DIV_4);
+#if NRF53_ERRATA_159_ENABLE_WORKAROUND
+	if (nrf53_errata_159()) {
+		/* Restore previous hfclk configuration */
+		nrf_clock_hfclk_div_set(NRF_CLOCK, *dev);
+	}
+#endif
+#endif
+}
+
+// TODO: work out how to cleanly write a single wrapper function, this is getting bloated...
+#if defined(MICRO_FAMILY_NRF5340)
+  #define ERRATA_159_WRAPPER(func) \
+    nrf_clock_hfclk_div_t clock_state = 0; \
+    qspi_clock_div_change(&clock_state); \
+    func \
+    qspi_clock_div_restore(&clock_state);
+#else
+  #define ERRATA_159_WRAPPER(func) \
+    func
+#endif
+
+
+
+// nrfx_err_t nrfx_qspi_cinstr_xfer_MODIFIED(nrf_qspi_cinstr_conf_t const * p_config, void const * p_tx_buffer, void * p_rx_buffer) {
+//   // adding bit to account for errata 159 since this is an old sdk and I don't 
+//   // want to go though the pain of fully updating it atm
+
+// #if defined(MICRO_FAMILY_NRF5340)
+//   nrf_clock_hfclk_div_t clock_state = 0;
+//   qspi_clock_div_change(&clock_state);
+// #endif
+
+//   nrfx_err_t err = nrfx_qspi_cinstr_xfer(p_config, p_tx_buffer, p_rx_buffer);
+
+// #if defined(MICRO_FAMILY_NRF5340)
+//   qspi_clock_div_restore(&clock_state);
+// #endif
+
+//   return err;
+// }
+
+// nrfx_err_t nrfx_qspi_read_MODIFIED(void * p_rx_buffer, size_t rx_buffer_length, uint32_t src_address) {
+//   // adding bit to account for errata 159 since this is an old sdk and I don't 
+//   // want to go though the pain of fully updating it atm
+
+// #if defined(MICRO_FAMILY_NRF5340)
+//   nrf_clock_hfclk_div_t clock_state = 0;
+//   qspi_clock_div_change(&clock_state);
+// #endif
+
+//   nrfx_err_t err = nrfx_qspi_read(p_rx_buffer, rx_buffer_length, src_address);
+
+// #if defined(MICRO_FAMILY_NRF5340)
+//   qspi_clock_div_restore(&clock_state);
+// #endif
+
+//   return err;
+// }
+
+// nrfx_err_t nrfx_qspi_write_MODIFIED(void const * p_tx_buffer, size_t tx_buffer_length, uint32_t dst_address) {
+//   // adding bit to account for errata 159 since this is an old sdk and I don't 
+//   // want to go though the pain of fully updating it atm
+
+// #if defined(MICRO_FAMILY_NRF5340)
+//   nrf_clock_hfclk_div_t clock_state = 0;
+//   qspi_clock_div_change(&clock_state);
+// #endif
+
+//   nrfx_err_t err = nrfx_qspi_write(p_tx_buffer, tx_buffer_length, dst_address);
+
+// #if defined(MICRO_FAMILY_NRF5340)
+//   qspi_clock_div_restore(&clock_state);
+// #endif
+
+//   return err;
+// }
+
+// not using wrapper because its used in annoying spots like while loops, simple macro doesn't work :(
+nrfx_err_t nrfx_qspi_mem_busy_check_MODIFIED() {
+  // adding bit to account for errata 159 since this is an old sdk and I don't 
+  // want to go though the pain of fully updating it atm
+
+#if defined(MICRO_FAMILY_NRF5340)
+  nrf_clock_hfclk_div_t clock_state = 0;
+  qspi_clock_div_change(&clock_state);
+#endif
+
+  nrfx_err_t err = nrfx_qspi_mem_busy_check();
+
+#if defined(MICRO_FAMILY_NRF5340)
+  qspi_clock_div_restore(&clock_state);
+#endif
+
+  return err;
+}
+
 static void prv_read_register(QSPIPort *dev, uint8_t instruction, uint8_t *data, uint32_t length) {
   nrf_qspi_cinstr_conf_t instr = NRFX_QSPI_DEFAULT_CINSTR(instruction, length + 1);
   instr.io2_level = true;
   instr.io3_level = true;
-  nrfx_err_t err = nrfx_qspi_cinstr_xfer(&instr, NULL, data);
+  ERRATA_159_WRAPPER(nrfx_err_t err = nrfx_qspi_cinstr_xfer(&instr, NULL, data);)
   PBL_ASSERTN(err == NRFX_SUCCESS);
 }
 
@@ -57,7 +189,7 @@ static void prv_write_register(QSPIPort *dev, uint8_t instruction, const uint8_t
   instr.io2_level = true;
   instr.io3_level = true;
   instr.wren = true;
-  nrfx_err_t err = nrfx_qspi_cinstr_xfer(&instr, data, NULL);
+  ERRATA_159_WRAPPER(nrfx_err_t err = nrfx_qspi_cinstr_xfer(&instr, data, NULL);)
   PBL_ASSERTN(err == NRFX_SUCCESS);
 }
 
@@ -65,7 +197,7 @@ static void prv_write_cmd_no_addr(QSPIPort *dev, uint8_t cmd) {
   nrf_qspi_cinstr_conf_t instr = NRFX_QSPI_DEFAULT_CINSTR(cmd, 1);
   instr.io2_level = true;
   instr.io3_level = true;
-  nrfx_err_t err = nrfx_qspi_cinstr_xfer(&instr, NULL, NULL);
+  ERRATA_159_WRAPPER(nrfx_err_t err = nrfx_qspi_cinstr_xfer(&instr, NULL, NULL);)
   PBL_ASSERTN(err == NRFX_SUCCESS);
 }
 
@@ -276,8 +408,8 @@ status_t qspi_flash_is_erase_complete(QSPIFlash *dev) {
 status_t qspi_flash_erase_begin(QSPIFlash *dev, uint32_t addr, bool is_subsector) {
   prv_write_enable(dev);
 
-  nrfx_err_t err =
-      nrfx_qspi_erase(is_subsector ? NRF_QSPI_ERASE_LEN_4KB : NRF_QSPI_ERASE_LEN_64KB, addr);
+  ERRATA_159_WRAPPER(nrfx_err_t err =
+      nrfx_qspi_erase(is_subsector ? NRF_QSPI_ERASE_LEN_4KB : NRF_QSPI_ERASE_LEN_64KB, addr);)
   PBL_ASSERTN(err == NRFX_SUCCESS);
 
   prv_wait_for_completion(dev);
@@ -332,7 +464,7 @@ void qspi_flash_read_blocking(QSPIFlash *dev, uint32_t addr, void *buffer, uint3
   buf_mid = length - buf_pre - buf_suf;
 
   if (buf_pre != 0U) {
-    err = nrfx_qspi_read(b_buf, 4U, addr);
+    ERRATA_159_WRAPPER(err = nrfx_qspi_read(b_buf, 4U, addr);)
     prv_wait_for_completion(dev);
     PBL_ASSERTN(err == NRFX_SUCCESS);
 
@@ -342,7 +474,7 @@ void qspi_flash_read_blocking(QSPIFlash *dev, uint32_t addr, void *buffer, uint3
   }
 
   if (buf_mid != 0U) {
-    err = nrfx_qspi_read(buffer, buf_mid, addr);
+    ERRATA_159_WRAPPER(err = nrfx_qspi_read(buffer, buf_mid, addr);)
     prv_wait_for_completion(dev);
     PBL_ASSERTN(err == NRFX_SUCCESS);
 
@@ -351,7 +483,7 @@ void qspi_flash_read_blocking(QSPIFlash *dev, uint32_t addr, void *buffer, uint3
   }
 
   if (buf_suf != 0U) {
-    err = nrfx_qspi_read(b_buf, 4U, addr);
+    ERRATA_159_WRAPPER(err = nrfx_qspi_read(b_buf, 4U, addr);)
     prv_wait_for_completion(dev);
     PBL_ASSERTN(err == NRFX_SUCCESS);
 
@@ -391,7 +523,7 @@ int qspi_flash_write_page_begin(QSPIFlash *dev, const void *buffer, uint32_t add
     memset(&b_buf[buf_pre], 0xff, sizeof(b_buf) - buf_pre);
     memcpy(b_buf, buffer, buf_pre);
 
-    err = nrfx_qspi_write(b_buf, 4U, addr);
+    ERRATA_159_WRAPPER(err = nrfx_qspi_write(b_buf, 4U, addr);)
     prv_wait_for_completion(dev);
     PBL_ASSERTN(err == NRFX_SUCCESS);
 
@@ -400,10 +532,10 @@ int qspi_flash_write_page_begin(QSPIFlash *dev, const void *buffer, uint32_t add
   }
 
   if (buf_mid != 0U) {
-    while (nrfx_qspi_mem_busy_check() == NRFX_ERROR_BUSY) {
+    while (nrfx_qspi_mem_busy_check_MODIFIED() == NRFX_ERROR_BUSY) {
     }
 
-    err = nrfx_qspi_write(buffer, buf_mid, addr);
+    ERRATA_159_WRAPPER(err = nrfx_qspi_write(buffer, buf_mid, addr);)
     prv_wait_for_completion(dev);
     PBL_ASSERTN(err == NRFX_SUCCESS);
 
@@ -412,13 +544,13 @@ int qspi_flash_write_page_begin(QSPIFlash *dev, const void *buffer, uint32_t add
   }
 
   if (buf_suf != 0U) {
-    while (nrfx_qspi_mem_busy_check() == NRFX_ERROR_BUSY) {
+    while (nrfx_qspi_mem_busy_check_MODIFIED() == NRFX_ERROR_BUSY) {
     }
 
     memset(&b_buf[buf_suf], 0xff, 4U - buf_suf);
     memcpy(b_buf, buffer, buf_suf);
 
-    err = nrfx_qspi_write(b_buf, 4U, addr);
+    ERRATA_159_WRAPPER(err = nrfx_qspi_write(b_buf, 4U, addr);)
     prv_wait_for_completion(dev);
     PBL_ASSERTN(err == NRFX_SUCCESS);
   }
@@ -427,7 +559,7 @@ int qspi_flash_write_page_begin(QSPIFlash *dev, const void *buffer, uint32_t add
 }
 
 status_t qspi_flash_get_write_status(QSPIFlash *dev) {
-  return nrfx_qspi_mem_busy_check() == NRFX_SUCCESS ? S_SUCCESS : E_BUSY;
+  return nrfx_qspi_mem_busy_check_MODIFIED() == NRFX_SUCCESS ? S_SUCCESS : E_BUSY;
 }
 
 void qspi_flash_set_lower_power_mode(QSPIFlash *dev, bool active) {
@@ -541,7 +673,7 @@ status_t qspi_flash_read_security_register(QSPIFlash *dev, uint32_t addr, uint8_
     out[2] = addr & 0xFFU;
   }
 
-  err = nrfx_qspi_cinstr_xfer(&instr, out, in);
+  ERRATA_159_WRAPPER(err = nrfx_qspi_cinstr_xfer(&instr, out, in);)
   if (err != NRFX_SUCCESS) {
     return E_ERROR;
   }
@@ -593,12 +725,12 @@ status_t qspi_flash_erase_security_register(QSPIFlash *dev, uint32_t addr) {
     out[2] = addr & 0xFFU;
   }
 
-  err = nrfx_qspi_cinstr_xfer(&instr, out, NULL);
+  ERRATA_159_WRAPPER(err = nrfx_qspi_cinstr_xfer(&instr, out, NULL);)
   if (err != NRFX_SUCCESS) {
     return E_ERROR;
   }
 
-  while (nrfx_qspi_mem_busy_check() == NRFX_ERROR_BUSY) {
+  while (nrfx_qspi_mem_busy_check_MODIFIED() == NRFX_ERROR_BUSY) {
   }
 
   return 0;
@@ -634,12 +766,12 @@ status_t qspi_flash_write_security_register(QSPIFlash *dev, uint32_t addr, uint8
     out[3] = val;
   }
 
-  err = nrfx_qspi_cinstr_xfer(&instr, out, NULL);
+  ERRATA_159_WRAPPER(err = nrfx_qspi_cinstr_xfer(&instr, out, NULL);)
   if (err != NRFX_SUCCESS) {
     return E_ERROR;
   }
 
-  while (nrfx_qspi_mem_busy_check() == NRFX_ERROR_BUSY) {
+  while (nrfx_qspi_mem_busy_check_MODIFIED() == NRFX_ERROR_BUSY) {
   }
 
   return 0;

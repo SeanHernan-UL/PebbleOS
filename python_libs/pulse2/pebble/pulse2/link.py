@@ -142,6 +142,7 @@ class Interface(object):
             for frame in splitter:
                 try:
                     datagram = framing.decode_frame(frame)
+                    print(datagram)
                     if self.pcap:
                         # Prepend pseudo-header meaning "received by this host"
                         self.pcap.write_packet(b'\0' + datagram)
