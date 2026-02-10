@@ -77,12 +77,12 @@ IRQ_MAP_NRFX(TIMER2, nrfx_timer_2_irq_handler);
 
 /* display */
 // PwmState DISPLAY_EXTCOMIN_STATE;
-// IRQ_MAP_NRFX(SERIAL1, nrfx_spim_3_irq_handler);
+IRQ_MAP_NRFX(SERIAL3, nrfx_spim_3_irq_handler);
 
 /* PERIPHERAL ID 10 */
 
 /* EXTI */
-IRQ_MAP_NRFX(SPIM4, nrfx_gpiote_0_irq_handler);
+IRQ_MAP_NRFX(GPIOTE0, nrfx_gpiote_0_irq_handler);
 
 /* nPM1300 */
 // static I2CBusState I2C_NPMC_IIC1_BUS_STATE = {};

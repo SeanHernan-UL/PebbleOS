@@ -122,22 +122,44 @@ extern UARTDevice * const DBG_UART;
 // static const BoardConfigSharpDisplay BOARD_CONFIG_DISPLAY = {
 //   .spi = NRFX_SPIM_INSTANCE(3),
 
-//   .clk = { NRF5_GPIO_RESOURCE_EXISTS, NRF_GPIO_PIN_MAP(0, 6), true },
-//   .mosi = { NRF5_GPIO_RESOURCE_EXISTS, NRF_GPIO_PIN_MAP(0, 8), true },
-//   .cs = { NRF5_GPIO_RESOURCE_EXISTS, NRF_GPIO_PIN_MAP(1, 3), true },
+//   .clk = { NRF5_GPIO_RESOURCE_EXISTS, NRF_GPIO_PIN_MAP(0, 4), true },
+//   .mosi = { NRF5_GPIO_RESOURCE_EXISTS, NRF_GPIO_PIN_MAP(0, 5), true },
+//   .cs = { NRF5_GPIO_RESOURCE_EXISTS, NRF_GPIO_PIN_MAP(0, 8), true },
 
-//   .on_ctrl = { NRF5_GPIO_RESOURCE_EXISTS, NRF_GPIO_PIN_MAP(0, 4), true },
+//   .on_ctrl = { NRF5_GPIO_RESOURCE_EXISTS, NRF_GPIO_PIN_MAP(0, 9), true },
 
-//   .extcomin = {
-//     .rtc = NRF_RTC0,
-//     .gpiote = NRF_GPIOTE,
-//     .gpiote_ch = 6,
-//     .psel = NRF_GPIO_PIN_MAP(1, 15),
-//     // 120Hz/5% (feeds flip-flop, generating 60Hz/50% signal to EXTCOMIN)
-//     .period_us = 1000000 / 120,
-//     .pulse_us = (1000000 / 120) / 20,
-//   },
+//   // .extcomin = {
+//   //   .rtc = NRF_RTC0,
+//   //   .gpiote = NRF_GPIOTE,
+//   //   .gpiote_ch = 6,
+//   //   .psel = NRF_GPIO_PIN_MAP(1, 15),
+//   //   // 120Hz/5% (feeds flip-flop, generating 60Hz/50% signal to EXTCOMIN)
+//   //   .period_us = 1000000 / 120,
+//   //   .pulse_us = (1000000 / 120) / 20,
+//   // },
 // };
+
+static const BoardConfigEpsonDisplayDriver BOARD_CONFIG_DISPLAY = {
+  .spi = NRFX_SPIM_INSTANCE(3),
+
+
+  .clk = { NRF5_GPIO_RESOURCE_EXISTS, NRF_GPIO_PIN_MAP(0, 4), true }, // AIN0, need to reconfigure?
+  .mosi = { NRF5_GPIO_RESOURCE_EXISTS, NRF_GPIO_PIN_MAP(0, 5), true }, // AIN1, need to reconfigure?
+  .miso = { NRF5_GPIO_RESOURCE_EXISTS, NRF_GPIO_PIN_MAP(0, 8), true },
+  .cs = { NRF5_GPIO_RESOURCE_EXISTS, NRF_GPIO_PIN_MAP(0, 9), true },
+
+  .on_ctrl = { NRF5_GPIO_RESOURCE_EXISTS, NRF_GPIO_PIN_MAP(0, 15), true }, // controls regulator...
+
+  // .extcomin = {
+  //   .rtc = NRF_RTC0,
+  //   .gpiote = NRF_GPIOTE,
+  //   .gpiote_ch = 0,
+  //   .psel = NRF_GPIO_PIN_MAP(0, 10),
+  //   // 120Hz/5% (feeds flip-flop, generating 60Hz/50% signal to EXTCOMIN)
+  //   .period_us = 1000000 / 120,
+  //   .pulse_us = (1000000 / 120) / 20,
+  // },
+};
 
 extern QSPIPort * const QSPI;
 extern QSPIFlash * const QSPI_FLASH;

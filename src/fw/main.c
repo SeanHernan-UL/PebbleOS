@@ -119,6 +119,8 @@
 
 #include <string.h>
 
+#include "nrfx/drivers/include/nrfx_clock.h"
+
 /* here is as good as anywhere else ... */
 const int __attribute__((used)) uxTopUsedPriority = configMAX_PRIORITIES - 1;
 
@@ -180,6 +182,11 @@ static void dump_gpio_configuration_state(void) {
 int main(void) {
 #if defined(MICRO_FAMILY_SF32LB52)
   board_early_init();
+#endif
+
+#if defined(MICRO_FAMILY_NRF5340)
+  // set clock speed to 128 MHz 
+  nrfx_clock_divider_set(NRF_CLOCK_DOMAIN_HFCLK, NRF_CLOCK_HFCLK_DIV_1);
 #endif
 
   gpio_init_all();
