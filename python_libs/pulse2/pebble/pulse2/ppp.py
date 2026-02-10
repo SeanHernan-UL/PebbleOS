@@ -28,6 +28,7 @@ import itertools
 import logging
 import struct
 import threading
+import time
 
 import construct
 from transitions.extensions import LockedMachine
@@ -261,7 +262,7 @@ class ControlProtocol(object):
     max_failure = 5
 
     # Restart timer expiry duration, in seconds.
-    restart_timeout = 0.4
+    restart_timeout = 3
 
     # FIXME PBL-34320 proper MTU/MRU support
     mtu = 1500
@@ -964,7 +965,7 @@ class LinkControlProtocol(ControlProtocol):
         else:
             assert False, 'supported code not handled'
 
-    def ping(self, result_cb, attempts=3, timeout=1.0):
+    def ping(self, result_cb, attempts=3, timeout=5):
         '''Test the link quality by sending Echo-Request packets and
         listening for Echo-Response packets from the remote peer.
 
@@ -978,6 +979,7 @@ class LinkControlProtocol(ControlProtocol):
         to be in the Opened state, i.e. that the link is ready to carry
         traffic.
         '''
+        # time.sleep(.5)
         if self.state != 'Opened':
             raise LinkStateError('cannot ping when LCP is not Opened')
         if attempts < 1:

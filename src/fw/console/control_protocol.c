@@ -33,7 +33,7 @@
 
 #define MAX_CONFIGURE (10)
 #define MAX_TERMINATE (2)
-#define RESTART_TIMEOUT_MS (150)
+#define RESTART_TIMEOUT_MS (1000)
 
 #define LCP_HEADER_LEN (sizeof(LCPPacket))
 
@@ -69,7 +69,24 @@ static void prv_transition_to(PPPControlProtocol *this,
     this->on_this_layer_down(this);
   }
 
+  if (nextstate == LinkState_Opened) {
+    // flush the input buffer...
+
+  }
+
   this->state->link_state = nextstate;
+}
+
+static void send_state_info(PPPControlProtocol *this, int noise) {
+  // sending state info...
+  struct LCPPacket *request = pulse_link_send_begin(0x5021);
+  *request = (struct LCPPacket) {
+    .code = (int) (noise),
+    .identifier = (int) (this->state->link_state & 0xff),
+    .length = hton16(LCP_HEADER_LEN),
+  };
+
+  pulse_link_send(request, LCP_HEADER_LEN);
 }
 
 static void prv_send_configure_request(PPPControlProtocol *this) {
@@ -87,6 +104,8 @@ static void prv_send_configure_request(PPPControlProtocol *this) {
     .length = hton16(LCP_HEADER_LEN),
   };
   pulse_link_send(request, LCP_HEADER_LEN);
+
+  send_state_info(this, 0xee);
 }
 
 static void prv_send_configure_ack(PPPControlProtocol *this,
@@ -100,6 +119,8 @@ static void prv_send_configure_ack(PPPControlProtocol *this,
   memcpy(packet, triggering_packet, ntoh16(triggering_packet->length));
   packet->code = ControlCode_ConfigureAck;
   pulse_link_send(packet, ntoh16(triggering_packet->length));
+
+  send_state_info(this, 0xaa);
 }
 
 static void prv_send_configure_reject(PPPControlProtocol *this,
@@ -170,6 +191,7 @@ static void prv_on_timeout(void *context) {
       case LinkState_RequestSent:
       case LinkState_AckReceived:
       case LinkState_AckSent:
+        send_state_info(this, 0x84);
         prv_send_configure_request(this);
         if (this->state->link_state == LinkState_AckReceived) {
           prv_transition_to(this, LinkState_RequestSent);
@@ -210,6 +232,9 @@ static bool prv_handle_configure_request(PPPControlProtocol *this,
 
 static void prv_on_configure_request(PPPControlProtocol *this,
                                      struct LCPPacket *packet) {
+
+  send_state_info(this, 0x00);
+
   switch (this->state->link_state) {
     case LinkState_Closing:
     case LinkState_Stopping:
@@ -221,7 +246,7 @@ static void prv_on_configure_request(PPPControlProtocol *this,
     case LinkState_Stopped:
       this->state->restart_count = MAX_CONFIGURE;
       // fallthrough
-    case LinkState_Opened:
+    // case LinkState_Opened:
       prv_send_configure_request(this);
       // fallthrough
     case LinkState_RequestSent:
@@ -246,7 +271,7 @@ static void prv_on_configure_ack(PPPControlProtocol *this,
                                  struct LCPPacket *packet) {
   if (packet->identifier != this->state->last_configure_request_id) {
     // Invalid packet; silently discard
-    return;
+    // return;
   }
   if (ntoh16(packet->length) != LCP_HEADER_LEN) {
     // Only configure requests with no options are sent at the moment.
@@ -258,6 +283,8 @@ static void prv_on_configure_ack(PPPControlProtocol *this,
             "the sent Configure-Request. Discarding.");
     return;
   }
+
+  send_state_info(this, 0xff);
 
   switch (this->state->link_state) {
     case LinkState_Closed:
@@ -273,7 +300,7 @@ static void prv_on_configure_ack(PPPControlProtocol *this,
       prv_transition_to(this, LinkState_AckReceived);
       break;
     case LinkState_AckReceived:
-    case LinkState_Opened:
+    // case LinkState_Opened:
       PBL_LOG(LOG_LEVEL_WARNING, "Unexpected duplicate Configure-Ack");
       prv_send_configure_request(this);
       prv_transition_to(this, LinkState_RequestSent);

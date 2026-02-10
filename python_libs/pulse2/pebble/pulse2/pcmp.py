@@ -23,6 +23,7 @@ import enum
 import logging
 import struct
 import threading
+import time
 
 from . import exceptions
 from . import logging as pulse2_logging
@@ -157,7 +158,7 @@ class PulseControlMessageProtocol(object):
         else:
             assert False, 'Known code not handled'
 
-    def ping(self, result_cb, attempts=3, timeout=1.0):
+    def ping(self, result_cb, attempts=3, timeout=5):
         '''Test the link quality by sending Echo-Request packets and
         listening for Echo-Reply packets from the remote peer.
 
@@ -167,6 +168,7 @@ class PulseControlMessageProtocol(object):
         responded to the ping, or a falsy value if all ping attempts
         timed out.
         '''
+        # time.sleep(.5)
         if attempts < 1:
             raise ValueError('attempts must be positive')
         if timeout <= 0:

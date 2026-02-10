@@ -742,19 +742,18 @@ elif bld.is_obelix():
         ],
     )
 elif bld.is_hollow():
-    # FIXME: driver should use platform agnostic SPI interface
     bld.objects(
         name='driver_display',
         source=[
-            # 'display/sharp_ls013b7dh01/sharp_ls013b7dh01_nrf5.c',
-            'stubs/display.c'
+            'display/s1d13c00/s1d13c00_nrf5.c',
+            # 'stubs/display.c'
         ],
         use=[
-            # 'driver_gpio',
-            # 'freertos',
+            'driver_gpio',
+            'freertos',
             'fw_includes',
-            # 'root_includes',
-            # 'hal_nordic',
+            'root_includes',
+            'hal_nordic',
         ],
     )
 

@@ -1599,6 +1599,7 @@ def image_resources(ctx):
         return
 
     tool_name = _get_pulse_flash_tool(ctx)
+    print(f'## tool_name: {tool_name}')
     pbpack_path = ctx.get_pbpack_node().abspath()
     waflib.Logs.pprint('CYAN', 'Writing pbpack "%s" to tty %s' % (pbpack_path, tty))
 

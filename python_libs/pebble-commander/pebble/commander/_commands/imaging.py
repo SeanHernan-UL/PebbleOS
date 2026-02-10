@@ -197,8 +197,13 @@ def load_firmware(connection, fin, progress, verbose, address=None):
 
 
 def load_resources(connection, fin, progress, verbose):
+    print(f'## Running load_resources ##')
     _, address, length = connection.flash.query_region_geometry(
             connection.flash.REGION_SYSTEM_RESOURCES)
+    
+    print(f'## file: {fin}')
+    print(f'## address: {address}')
+    print(f'## length: {length}')
 
     with open(fin, 'rb') as f:
         data = f.read()

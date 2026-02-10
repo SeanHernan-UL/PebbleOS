@@ -82,8 +82,9 @@ class WriteResponse(object):
     @classmethod
     def parse(cls, response):
         if response[0] != cls.response_type:
-            raise exceptions.ResponseParseError(
-                    'Unexpected response: %r' % response)
+            # raise exceptions.ResponseParseError(
+            #         'Unexpected response: %r' % response)
+            return None
         return cls.Response._make(cls.response_struct.unpack(response))
 
 
@@ -146,6 +147,7 @@ class QueryFlashRegionCommand(object):
         unpacked = self.Response._make(self.response_struct.unpack(response))
         if unpacked.address == 0 and unpacked.length == 0:
             raise exceptions.RegionDoesNotExist(self.region)
+        print(f'############## {unpacked}')
         return unpacked
 
 
@@ -169,6 +171,7 @@ class FinalizeFlashRegionCommand(object):
             raise exceptions.ResponseParseError(
                     'Unexpected response: %r' % response)
         region, = self.response_struct.unpack(response)
+        print(f'############## {region}')
         if region != self.region:
             raise exceptions.ResponseParseError(
                     'Response does not match command: '
@@ -211,7 +214,7 @@ class FlashImaging(object):
                 continue
         raise exceptions.CommandTimedOut
 
-    def write(self, address, data, max_retries=5, max_in_flight=5,
+    def write(self, address, data, max_retries=20, max_in_flight=5,
               progress_cb=None):
         mtu = self.socket.mtu - WriteCommand.header_len
         assert(mtu > 0)
@@ -225,12 +228,15 @@ class FlashImaging(object):
 
         in_flight = collections.OrderedDict()
         retries = 0
+        # print(f'######## Unsent length: {unsent.length()}')
         while unsent or in_flight:
             try:
                 while True:
                     # Process ACKs (if any)
                     ack = WriteResponse.parse(
                             self.socket.receive(block=False))
+                    if ack == None:
+                        break
                     try:
                         cmd, _, _ = in_flight[ack.address]
                         del in_flight[ack.address]
@@ -264,7 +270,7 @@ class FlashImaging(object):
 
             # Retry any in_flight writes where the ACK has timed out
             to_retry = []
-            timeout_time = time.time() - 0.5
+            timeout_time = time.time() - .5
             for (seg_address,
                     (cmd, send_time, retry_count)) in in_flight.copy().items():
                 if send_time > timeout_time:

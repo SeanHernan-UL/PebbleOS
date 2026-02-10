@@ -33,6 +33,10 @@ from . import stats
 
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.NullHandler())
+# logging.basicConfig(
+#     level=logging.DEBUG,
+#     format='%(asctime)s - %(levelname)s - %(message)s'
+# )
 
 
 class Socket(object):
@@ -54,9 +58,12 @@ class Socket(object):
             raise exceptions.SocketClosed('I/O operation on closed socket')
         try:
             info_good, info = self.receive_queue.get(block, timeout)
+            # print(f'################# info_good {info_good}')
+            # print(f'################# info {info}')
             if not info_good:
                 assert self.closed
-                raise exceptions.SocketClosed('Socket closed during receive')
+                # raise exceptions.SocketClosed('Socket closed during receive')
+                raise exceptions.ReceiveQueueEmpty
             return info
         except queue.Empty:
             raise exceptions.ReceiveQueueEmpty
@@ -67,13 +74,14 @@ class Socket(object):
         self.transport.send(self.port, information)
 
     def close(self):
-        if self.closed:
-            return
-        self.closed = True
-        self.transport.unregister_socket(self.port)
-        # Wake up the thread blocking on a receive (if any) so that it
-        # can abort the receive quickly.
-        self.receive_queue.put((False, None))
+        pass
+        # if self.closed:ee
+        #     return
+        # self.closed = True
+        # self.transport.unregister_socket(self.port)
+        # # Wake up the thread blocking on a receive (if any) so that it
+        # # can abort the receive quickly.
+        # self.receive_queue.put((False, None))
 
     @property
     def mtu(self):
@@ -109,6 +117,7 @@ BestEffortPacket = construct.Struct('BestEffortPacket',  # noqa
 class BestEffortTransportBase(object):
 
     def __init__(self, interface, link_mtu):
+        print('initing BET')
         self.logger = pulse2_logging.TaggedAdapter(
                 logger, {'tag': type(self).__name__})
         self.sockets = {}
@@ -141,23 +150,31 @@ class BestEffortTransportBase(object):
                               fields.length-4, len(fields.information))
             return
 
+        # print(self.sockets)
+        # if 2 not in self.sockets or self.sockets[2].closed:
+        #     self.open_socket(2)
+
         if fields.port in self.sockets:
             self.sockets[fields.port].on_receive(fields.information)
         else:
-            self.logger.warning('Received packet for unopened port %04X',
-                                fields.port)
+            pass
+            # self.logger.warning('Received packet for unopened port %04X',
+            #                     fields.port)
 
     def open_socket(self, port, factory=Socket):
+        print('Opening socket... (BET)')
         if self.closed:
             raise ValueError('Cannot open socket on closed transport')
         if port in self.sockets and not self.sockets[port].closed:
-            raise KeyError('Another socket is already opened '
-                           'on port 0x%04x' % port)
+            # raise KeyError('Another socket is already opened '
+            #                'on port 0x%04x' % port)
+            self.unregister_socket(port)
         socket = factory(self, port)
         self.sockets[port] = socket
         return socket
 
     def unregister_socket(self, port):
+        # pass
         del self.sockets[port]
 
     def down(self):
@@ -166,6 +183,7 @@ class BestEffortTransportBase(object):
         This closes the Transport object. Once closed, the Transport
         cannot be reopened.
         '''
+        print('BET DEAD')
         self.closed = True
         self.close_all_sockets()
         self.link_socket.close()
@@ -190,6 +208,8 @@ class BestEffortApplicationTransport(BestEffortTransportBase):
     PROTOCOL_NUMBER = 0x3A29
 
     def __init__(self, interface, link_mtu):
+        print(f'initing BEAT (interface = {interface})')
+        # time.sleep(3)
         BestEffortTransportBase.__init__(self, interface=interface,
                                          link_mtu=link_mtu)
         self.opened = threading.Event()
@@ -216,6 +236,7 @@ class BestEffortApplicationTransport(BestEffortTransportBase):
         # Don't need to do anything in the success case as receiving
         # any packet is enough to set the transport as Opened.
         if not ping_check_succeeded:
+            print("## Ping check failed. Restarting transport.")
             self.logger.warning('Ping check failed. Restarting transport.')
             self.ncp.restart()
 
@@ -224,16 +245,17 @@ class BestEffortApplicationTransport(BestEffortTransportBase):
         self.close_all_sockets()
 
     def send(self, *args, **kwargs):
-        if self.closed:
-            raise exceptions.TransportNotReady(
-                    'I/O operation on closed transport')
-        if not self.ncp.is_Opened():
-            raise exceptions.TransportNotReady(
-                    'I/O operation before transport is opened')
+        # if self.closed:
+        #     raise exceptions.TransportNotReady(
+        #             'I/O operation on closed transport')
+        # if not self.ncp.is_Opened():
+        #     raise exceptions.TransportNotReady(
+        #             'I/O operation before transport is opened')
+        print('Sending ping...')
         BestEffortTransportBase.send(self, *args, **kwargs)
 
     def packet_received(self, packet):
-        if self.ncp.is_Opened():
+        if True: #self.ncp.is_Opened():
             self.opened.set()
             BestEffortTransportBase.packet_received(self, packet)
         else:
@@ -241,11 +263,14 @@ class BestEffortApplicationTransport(BestEffortTransportBase):
                                 'Discarding.')
 
     def open_socket(self, port, timeout=30.0, factory=Socket):
-        if not self.opened.wait(timeout):
-            return None
+        print('Opening socket... (BEAT)')
+        self.opened.set()
+        # if not self.opened.wait(timeout):
+        #     return None
         return BestEffortTransportBase.open_socket(self, port, factory)
 
     def down(self):
+        print('BEAT DEAD')
         self.ncp.down()
         BestEffortTransportBase.down(self)
 
@@ -332,9 +357,11 @@ class ReliableTransport(object):
     MODULUS = 128
 
     max_retransmits = 10  # N2 system parameter in LAPB
-    retransmit_timeout = 0.2  # T1 system parameter
+    retransmit_timeout = 5  # T1 system parameter
 
     def __init__(self, interface, link_mtu):
+        print(f'initing RT (interface = {interface})')
+        # time.sleep(1)
         self.logger = pulse2_logging.TaggedAdapter(
                 logger, {'tag': type(self).__name__})
         self.send_queue = queue.Queue()
@@ -419,6 +446,7 @@ class ReliableTransport(object):
         self.logger.info('Round-trip %s ms', self.stats['round_trip_time'])
 
     def open_socket(self, port, timeout=30.0, factory=Socket):
+        print('Opening socket... (RT)')
         if self.closed:
             raise ValueError('Cannot open socket on closed transport')
         if port in self.sockets and not self.sockets[port].closed:

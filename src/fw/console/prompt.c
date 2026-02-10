@@ -355,18 +355,18 @@ typedef struct __attribute__((__packed__)) PromptResponseContents {
 
 static void pulse_send_message(const int message_type, const char *response) {
   size_t response_length = 0;
-#if PULSE_EVERYWHERE
-  PromptResponseContents *contents = pulse_reliable_send_begin(
-      PULSE2_RELIABLE_PROMPT_PROTOCOL);
-  if (!contents) {
-    // Transport went down while waiting to send. Just throw away the message;
-    // there's not much else we can do.
-    return;
-  }
-#else
+// #if PULSE_EVERYWHERE
+//   PromptResponseContents *contents = pulse_reliable_send_begin(
+//       PULSE2_RELIABLE_PROMPT_PROTOCOL);
+//   if (!contents) {
+//     // Transport went down while waiting to send. Just throw away the message;
+//     // there's not much else we can do.
+//     return;
+//   }
+// #else
   PromptResponseContents *contents = pulse_best_effort_send_begin(
       PULSE_PROTOCOL_PROMPT);
-#endif
+// #endif
 
   if (response) {
     response_length = strlen(response);
@@ -383,11 +383,11 @@ static void pulse_send_message(const int message_type, const char *response) {
   if (response_length > 0) {
     strncpy(contents->message, response, response_length);
   }
-#if PULSE_EVERYWHERE
-  pulse_reliable_send(contents, total_size);
-#else
+// #if PULSE_EVERYWHERE
+//   pulse_reliable_send(contents, total_size);
+// #else
   pulse_best_effort_send(contents, total_size);
-#endif
+// #endif
 }
 
 static void prv_pulse_done_command(void) {

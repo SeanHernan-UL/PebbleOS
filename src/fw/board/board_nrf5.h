@@ -286,6 +286,20 @@ typedef struct {
   const NrfLowPowerPWM extcomin;
 } BoardConfigSharpDisplay;
 
+typedef struct {
+  nrfx_spim_t spi;
+
+  const OutputConfig mosi;
+  const OutputConfig miso;
+  const OutputConfig clk;
+  const OutputConfig cs;
+
+  const OutputConfig on_ctrl;
+  // const nrf_gpio_pin_drive_t on_ctrl_otype;
+
+  // const NrfLowPowerPWM extcomin;
+} BoardConfigEpsonDisplayDriver;
+
 typedef const struct DMARequest DMARequest;
 typedef const struct UARTDevice UARTDevice;
 typedef const struct SPIBus SPIBus;

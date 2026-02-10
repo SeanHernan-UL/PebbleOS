@@ -16,7 +16,7 @@ from __future__ import absolute_import
 
 import logging
 import threading
-
+import time
 import serial
 
 from . import exceptions, framing, ppp, transports
@@ -107,6 +107,7 @@ class Interface(object):
         '''Open a link-layer socket for sending and receiving packets
         of a specific protocol number.
         '''
+        time.sleep(.01)
         if protocol in self.sockets and not self.sockets[protocol].closed:
             raise ValueError('A socket is already bound '
                              'to protocol 0x%04x' % protocol)
@@ -142,7 +143,7 @@ class Interface(object):
             for frame in splitter:
                 try:
                     datagram = framing.decode_frame(frame)
-                    print(datagram)
+                    # print(datagram)
                     if self.pcap:
                         # Prepend pseudo-header meaning "received by this host"
                         self.pcap.write_packet(b'\0' + datagram)
@@ -163,6 +164,7 @@ class Interface(object):
             # Prepend pseudo-header meaning "sent by this host"
             self.pcap.write_packet(b'\x01' + datagram)
         self.iostream.write(framing.encode_frame(datagram))
+        # print(f'# PC: {datagram}')
 
     def close_all_sockets(self):
         # Iterating over a copy of sockets since socket.close() can call
@@ -210,7 +212,7 @@ class Interface(object):
         self._link.down()
         self._link = None
 
-    def get_link(self, timeout=60.0):
+    def get_link(self, timeout=999.0):
         '''Get the opened Link object for this interface.
 
         This function will block waiting for the Link to be available.
@@ -300,7 +302,7 @@ class Link(object):
             transport = factory(interface, mtu)
             self.transports[name] = transport
 
-    def open_socket(self, transport, port, timeout=30.0):
+    def open_socket(self, transport, port, timeout=999.0):
         if self.closed:
             raise ValueError('Cannot open socket on closed Link')
         if transport not in self.transports:

@@ -318,9 +318,9 @@ static void prv_pulse_task_main(void *unused) {
     }
 
     // Finally handle the timer.
-    if (timeout == 0) {
-      pulse2_reliable_retransmit_timer_expired_handler(timer_sequence_number);
-    }
+    // if (timeout == 0) {
+    //   pulse2_reliable_retransmit_timer_expired_handler(timer_sequence_number);
+    // }
 
     prv_pulse_task_feed_watchdog();
   }

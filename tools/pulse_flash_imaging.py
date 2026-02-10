@@ -19,6 +19,7 @@ import argparse
 import logging
 import sys
 import traceback
+import time
 
 from pebble import pulse2, commander
 
@@ -60,7 +61,7 @@ def main():
     res_parser.set_defaults(func=load_resources)
 
     args = parser.parse_args()
-    print(args)
+    print(f'\n## args: {args}\n')
 
     if args.verbose:
         logging.basicConfig(level=logging.DEBUG)
@@ -68,10 +69,17 @@ def main():
         logging.basicConfig(level=logging.WARNING)
 
     interface = pulse2.Interface.open_dbgserial(url=args.tty)
+    print(f'\n## interface: {interface}\n')
     link = interface.get_link()
+    print(f'\n## Link acquired ({link}) ##\n')
     flash_imaging = commander.apps.FlashImaging(link)
+    print(f'## bing ##')
     connection = FakeCommander(flash_imaging)
+    print(f'## bong ##')
 
+    interface.iostream.reset_output_buffer()
+    interface.iostream.reset_input_buffer()
+    
     success = False
     try:
         success = args.func(connection, args.file, args.progress, args.verbose)

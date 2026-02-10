@@ -6,9 +6,11 @@
 #define PULSE2_BEST_EFFORT_CONTROL_PROTOCOL (0xBA29)
 #define PULSE2_BEST_EFFORT_TRANSPORT_PROTOCOL (0x3A29)
 
+/*
 #define PULSE2_RELIABLE_CONTROL_PROTOCOL (0xBA33)
 #define PULSE2_RELIABLE_TRANSPORT_COMMAND (0x3A33)
 #define PULSE2_RELIABLE_TRANSPORT_RESPONSE (0x3A35)
+*/
 
 #endif
 
@@ -58,6 +60,7 @@ ON_INIT(pulse2_best_effort_init)
 ON_LINK_STATE_CHANGE(pulse2_best_effort_on_link_up,
                      pulse2_best_effort_on_link_down)
 
+/*
 ON_PACKET(PULSE2_RELIABLE_CONTROL_PROTOCOL,
           pulse2_reliable_control_on_packet)
 ON_PACKET(PULSE2_RELIABLE_TRANSPORT_COMMAND,
@@ -67,5 +70,6 @@ ON_PACKET(PULSE2_RELIABLE_TRANSPORT_RESPONSE,
 ON_INIT(pulse2_reliable_init)
 ON_LINK_STATE_CHANGE(pulse2_reliable_on_link_up,
                      pulse2_reliable_on_link_down)
+*/
 
 // vim: filetype=c
