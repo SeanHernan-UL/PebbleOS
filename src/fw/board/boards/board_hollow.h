@@ -148,7 +148,7 @@ static const BoardConfigEpsonDisplayDriver BOARD_CONFIG_DISPLAY = {
   .miso = { NRF5_GPIO_RESOURCE_EXISTS, NRF_GPIO_PIN_MAP(0, 8), true },
   .cs = { NRF5_GPIO_RESOURCE_EXISTS, NRF_GPIO_PIN_MAP(0, 9), true },
 
-  .on_ctrl = { NRF5_GPIO_RESOURCE_EXISTS, NRF_GPIO_PIN_MAP(0, 15), true }, // controls regulator...
+  .on_ctrl = { NRF5_GPIO_RESOURCE_EXISTS, NRF_GPIO_PIN_MAP(0, 15), true },
 
   // .extcomin = {
   //   .rtc = NRF_RTC0,

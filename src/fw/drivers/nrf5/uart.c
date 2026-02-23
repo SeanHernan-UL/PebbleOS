@@ -45,6 +45,13 @@ void uart_init(UARTDevice *dev) {
     .interrupt_priority = NRFX_UARTE_DEFAULT_CONFIG_IRQ_PRIORITY,
   };
 
+  // turn off the instance FIXME: MCUBoot leaving in dirty state??
+  dev->periph.p_reg->ENABLE = 0x0;
+  // ensure hfwc registers are disconnected
+  dev->periph.p_reg->PSEL.RTS = NRF_UARTE_PSEL_DISCONNECTED;
+  dev->periph.p_reg->PSEL.CTS = NRF_UARTE_PSEL_DISCONNECTED;
+
+
   nrfx_err_t err = nrfx_uarte_init(&dev->periph, &config, _uart_event_handler);
   PBL_ASSERTN(err == NRFX_SUCCESS);
   

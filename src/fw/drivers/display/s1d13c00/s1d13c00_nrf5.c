@@ -51,12 +51,18 @@ static SemaphoreHandle_t s_sem;
 #define FASTREAD 0x0B
 #define PAGEPROG 0x02
 
+#define RAM_START (0x20000000)
+#define RAM_END (0x20017fff)
+
 // System Control
 #define SYSCTRL (0x400030e0)
 #define RESET ((0x1) << 15)
-#define IOSC_TRIM ((0x9) << 8)
-#define IOSC_POL ((0x1) << 4)
+#define IOSC_TRIM ((0x24) << 8) // original trim was 0x9s
+#define INT_POL ((0x1) << 4)
 #define IOSC_STABLE ((0x1) << 3) // (read only)
+#define IOSC_8MHZ ((0x0) << 1)
+#define IOSC_12MHZ ((0x1) << 1)
+#define IOSC_16MHZ ((0x2) << 1)
 #define IOSC_20MHZ ((0x3) << 1)
 #define START_IOSC ((0x1) << 0)
 
@@ -78,7 +84,8 @@ static SemaphoreHandle_t s_sem;
 #define OSDRB ((0x1) << 14)
 #define OSDEN ((0x1) << 13)
 #define OSC1BUP ((0x1) << 12)
-#define OSC1SELCR ((0x1) << 11)
+#define OSC1SELCR_EXT ((0x0) << 11)
+#define OSC1SELCR_IN ((0x1) << 11)
 #define INVIB ((0x2) << 6)
 #define INVIN ((0x1) << 4)
 #define OSC1WT ((0x2) << 0)
@@ -113,6 +120,7 @@ static SemaphoreHandle_t s_sem;
 
 // MDC Voltage Booster/Regulator VMD Output Control
 #define MDCBSTVMD (0x40003088)
+#define VMDHVOL_5V0 ((0x7) << 12)
 #define VMDHVOL_4V5 ((0x2) << 12)
 #define VMDHON ((0x1) << 8)
 #define VMDLVOL_3V2 ((0x4) << 4)
@@ -121,6 +129,15 @@ static SemaphoreHandle_t s_sem;
 
 // MDC Display Control
 #define MDCDISPCTL (0x40003000)
+#define DISPGS_0 ((0x0) << 11)
+#define DISPINVERT ((0x1) << 7)
+#define DISPSPI_0 ((0x0) << 4)
+#define ROTSEL_270 ((0x3) << 2)
+#define ROTSEL_180 ((0x2) << 2)
+#define ROTSEL_90 ((0x1) << 2)
+#define ROTSEL_NONE ((0x0) << 2)
+#define VCOMEN ((0x1) << 1)
+#define DISPEPD_0 ((0x0) << 0)
 
 // MDC Display Width
 #define MDCDISPWIDTH (0x40003002)
@@ -163,9 +180,17 @@ static SemaphoreHandle_t s_sem;
 
 // MDC Trigger control
 #define MDCTRIGCTL (0x4000301c)
+#define UPDTRIG ((0x1) << 1)
+#define GFXTRIG ((0x1) << 0)
 
 // MDC Interrupt control
 #define MDCINTCTL (0x4000301e)
+#define VCNTIE ((0x1) << 10)
+#define UPDIE ((0x1) << 9)
+#define GFXIE ((0x10) << 8)
+#define VCNTIF ((0x1) << 2)
+#define UPDIF ((0x1) << 1)
+#define GFXIF ((0x1) << 1)
 
 // MDC Graphics control
 #define MDCGFXCTL (0x40003020)
@@ -186,7 +211,7 @@ static SemaphoreHandle_t s_sem;
 #define MDCGFXOXCENTER (0x4000302a)
 
 // MDC Output Y coordinate
-#define MDCGFXOXCENTER (0x4000302c)
+#define MDCGFXOYCENTER (0x4000302c)
 
 // MDC Output width
 #define MDCGFXOWIDTH (0x4000302e)
@@ -259,26 +284,32 @@ static SemaphoreHandle_t s_sem;
 
 // MDC Display control 2
 #define MDCDISPCTL2 (0x4000305a)
+#define GSALPHA ((0x1) << 5)
+#define CSPOL ((0x1) << 4)
+#define VSTFALL ((0x1) << 3)
+#define HSTFALL ((0x1) << 2)
+#define ENBPHASE ((0x1) << 1)
+#define FASTVCK ((0x1) << 0)
 
 // MDC VCK count compare
 #define MDCVCNTCOMP (0x4000305c)
 
 // MDC VCK count
-#define MDCVCNTCOMP (0x4000305e)
+#define MDCVCNT (0x4000305e)
 
+
+// MCD VCOM Clock control register
+#define MDCVCOMCLKCTL (0x40003068)
 
 // MDC Voltage Booster/regulator VMD output control
 #define MDCBSTTVMD (0x40003088)
 
 
-
-
-
-
-
 static uint8_t out_buf[32];
 static uint8_t in_buf[32];
 
+void prv_display_clear(uint8_t colour);
+void prv_update_command();
 uint16_t prv_read(unsigned long address);
 void prv_write(unsigned long address, uint16_t value);
 
@@ -418,76 +449,116 @@ void display_init(void) {
   psleep(1); // sleep 1 ms
 
   // start IOSC
-  prv_write(SYSCTRL, IOSC_TRIM+IOSC_POL+IOSC_20MHZ+START_IOSC); 
+  prv_write(SYSCTRL, IOSC_TRIM+INT_POL+IOSC_20MHZ); // active low interrupt
+  prv_write(SYSCTRL, IOSC_TRIM+INT_POL+IOSC_20MHZ+START_IOSC); // active low interrupt
   psleep(1); // sleep 1 ms
+  prv_read(SYSCTRL);
+
+  // disable FOUT pin...
+  prv_write(0x40000212, 0x0); // turn GPIO in/out off
+  prv_write(0x4000021c, 0x0); // turn peripheral mode off
 
   // enable OSC1 sequence
   prv_write(CLGINTF, OSC1STAIF); // clear int flag
   prv_write(CLGINTE, OSC1STAIE); // enable interrupt
   prv_write(SYSPROT, PROT_DIS); // disable write protect
-  prv_write(CLGOSC1, 0x0000); // testing w/r permissions
-  prv_write(CLGOSC1, OSDEN+OSC1SELCR+INVIB+INVIN+OSC1WT); // defaults
+  prv_write(CLGOSC1, OSDEN+OSC1SELCR_IN+INVIB+INVIN+OSC1WT);
   prv_write(SYSPROT, PROT_DIS); // disable write protect
   prv_write(CLGOSC, OSC1_EN); // start the OSC1
+  psleep(1000); // sleep 1 s... FIXME: see if this time can be reduced later
+  
+  // check OSC1 stability
+  prv_read(SYSINTS); // bit 6 (CLG) should be set
+  prv_read(CLGINTF); // bit 1 should be set
+  prv_write(CLGINTF, OSC1STAIF); // clear int flag
+  prv_read(SYSINTS); // should be clear
   psleep(1); // sleep 1 ms
 
-  prv_read(CLGOSC);
+  // ## enable FOUT pin...
+  prv_write(0x4000021e, ((0x1) << 2)); // select FOUT
+  prv_write(0x4000021c, 0x2); // turn peripheral mode on
+  prv_write(0x40000050, ((0x4) << 4)+((0x0) << 2)); // config FOUT
+  prv_write(0x40000050, ((0x4) << 4)+((0x0) << 2)+((0x1) << 0)); // enable FOUT
+  // ## measuring the internal OSC1 as 30.273 kHz... (adjust trim...)
 
   // power on of voltage supplies
-  prv_write(MDCBSTCLK, CLKDIV+CLKSRC_OSC1);
+  prv_write(MDCBSTCLK, CLKSRC_OSC1);
   prv_write(MDCBSTPWR, BSTON+REGECO+REGON);
   psleep(2); // sleep 2 ms
 
-  // turn on VMDL
+  // turn on VMDL (3.2 V)
   prv_write(MDCBSTVMD, VMDLVOL_3V2+VMDLON);
   psleep(2); // sleep 2 ms
 
-  // turn on VMDH
-  prv_write(MDCBSTVMD, VMDHVOL_4V5+VMDHON+VMDLVOL_3V2+VMDLON);
+  // turn on VMDH (5 V)
+  prv_write(MDCBSTVMD, VMDHVOL_5V0+VMDHON+VMDLVOL_3V2+VMDLON);
   psleep(2); // sleep 2 ms
 
   // let display power up...
   psleep(1); // sleep 1 ms
   
-  // display config
-  prv_write(MDCDISPWIDTH, PBL_DISPLAY_WIDTH);
-  prv_write(MDCDISPHEIGHT, PBL_DISPLAY_HEIGHT);
-  prv_write(MDCDISPSTRIDE, 100); // FIXME: find actual values...
-  prv_write(MDCDISPVCOMDIV, 273); // VCOM freq=32768/(4*(273+1))=~30Hz... Transmissive mode
+  // display config (Sharp LS014B7DD01) (16 MHz clock as 20 MHz wouldn't work)
+  prv_write(MDCDISPVCOMDIV, 266); // VCOM freq=32000/(4*(273+1))=~30Hz... Transmissive mode
+  prv_write(MDCDISPCTL, DISPGS_0+DISPINVERT+DISPSPI_0+ROTSEL_NONE+DISPEPD_0); // review + #define...
+  // prv_write(MDCDISPCTL, DISPGS_0+DISPINVERT+DISPSPI_0+ROTSEL_NONE+VCOMEN+DISPEPD_0);
+  prv_write(MDCDISPCTL2, 0x0);
+  prv_write(MDCDISPCLKDIV, ((0) << 8)+((3) << 1)); // t0 = tsGCK2 = (6+1) T = 350 ns, T = (1)/(20 MHz) ~= 187.5 ns
+  prv_write(MDCDISPPRM21, ((0) << 8)+((145) << 0)); // t2 = thsBSP = (6+1) T = 350 ns, t1 = thsGSP = 49 us
+  prv_write(MDCDISPPRM43, ((35) << 8)+((0) << 0));  // t4 = [TIM4*(t3+t7) + t0 + t2] = tsGCK1 = 20 us -> TIM4 =33, t3 = tsRGB = (6+1) T = 350 ns
+  prv_write(MDCDISPPRM65, ((72) << 8)+((50) << 0));  // t6 = thsINTB = 25 us, t5 = [TIM5*(t3+t7)] = thwGEN = 30 us -> TIM5 = 50
+  prv_write(MDCDISPPRM87, ((0) << 8)+((0) << 0)); // t8 = thsBSP = (6+1) T = 350 ns, t7 = thRGB = (6+1) T = 350 ns
+  prv_write(MDCDISPPRM109, ((2) << 8)+((2) << 0)); // t9 = 100???, t10 = 100??? FIXME
+  prv_write(MDCDISPPRM1211, ((3) << 8)+((2) << 0)); // t12 = 100???, t11 = 100??? FIXME
+  prv_write(MDCDISPPRM1413, ((0) << 8)+((19) << 0)); // ----, t13 = thwGCK = 1 us (Fast forward GCK)
+  prv_write(MDCDISPWIDTH, 280);
+  prv_write(MDCDISPHEIGHT, 280);
+  prv_write(MDCDISPFRMBUFF0, RAM_START & 0xffff);
+  prv_write(MDCDISPFRMBUFF1, (RAM_START >> 16) & 0xffff); // 280*280 = 78400 = 0x00013240
+  prv_write(MDCDISPSTRIDE, 280); // number of bytes in each horizontal row FIXME
+  prv_write(MDCDISPSTARTY, 0);
+  prv_write(MDCDISPENDY, 279);
+
+  // ## Config calculations for 20 MHz
+  // prv_write(MDCDISPVCOMDIV, 266); // VCOM freq=32000/(4*(273+1))=~30Hz... Transmissive mode
+  // prv_write(MDCDISPCTL, DISPGS_0+DISPINVERT+DISPSPI_0+ROTSEL_NONE+VCOMEN+DISPEPD_0); // review + #define...
+  // prv_write(MDCDISPCTL2, VSTFALL+HSTFALL+ENBPHASE);
+  // prv_write(MDCDISPCLKDIV, ((2) << 8)+((2) << 1)); // t0 = tsGCK2 = (6+1) T = 350 ns, T = (1)/(20 MHz) = 50 ns
+  // prv_write(MDCDISPPRM21, ((2) << 8)+((167) << 0)); // t2 = thsBSP = (6+1) T = 350 ns, t1 = thsGSP = 49 us
+  // prv_write(MDCDISPPRM43, ((33) << 8)+((2) << 0));  // t4 = [TIM4*(t3+t7) + t0 + t2] = tsGCK1 = 20 us -> TIM4 =33, t3 = tsRGB = (6+1) T = 350 ns
+  // prv_write(MDCDISPPRM65, ((83) << 8)+((50) << 0));  // t6 = thsXRST = 25 us, t5 = [TIM5*(t3+t7)] = thwGEN = 30 us -> TIM5 = 50
+  // prv_write(MDCDISPPRM87, ((2) << 8)+((2) << 0)); // t8 = thsBSP = (6+1) T = 350 ns, t7 = thRGB = (6+1) T = 350 ns
+  // prv_write(MDCDISPPRM109, ((100) << 8)+((100) << 0)); // t9 = 100???, t10 = 100??? FIXME
+  // prv_write(MDCDISPPRM1211, ((100) << 8)+((100) << 0)); // t12 = 100???, t11 = 100??? FIXME
+  // prv_write(MDCDISPPRM1413, ((0) << 8)+((19) << 0)); // ----, t13 = thwGCK = 1 us (Fast forward GCK)
+  // prv_write(MDCDISPWIDTH, PBL_DISPLAY_WIDTH);
+  // prv_write(MDCDISPHEIGHT, PBL_DISPLAY_HEIGHT);
+  // prv_write(MDCDISPFRMBUFF0, RAM_START & 0xffff);
+  // prv_write(MDCDISPFRMBUFF1, (RAM_START >> 16) & 0xffff); // 280*280 = 78400 = 0x00013240
+  // prv_write(MDCDISPSTRIDE, PBL_DISPLAY_WIDTH); // number of bytes in each horizontal row FIXME
+  // prv_write(MDCDISPSTARTY, 0);
+  // prv_write(MDCDISPENDY, 279);
   
-  // FIXME: update values, based on produced result...
-  prv_write(MDCDISPCLKDIV, ((0x100) << 8)+((0x32) << 0)); // t0 = 50 ns, T = (32+1)/(32.768 MHz) ~= 1us
+  // graphics config for clearing display
+  prv_write(MDCGFXOBADDR0, RAM_START & 0xffff);
+  prv_write(MDCGFXOBADDR1, (RAM_START >> 16) & 0xffff); 
+  prv_write(MDCGFXOWIDTH, 280);
+  prv_write(MDCGFXOHEIGHT, 280);
+  prv_write(MDCGFXOSTRIDE, 280);
   
-  prv_write(MDCDISPPRM21, 0x0080);
-  prv_write(MDCDISPPRM43, 0x1900);
-  prv_write(MDCDISPPRM65, 0xff27);
-  prv_write(MDCDISPPRM87, 0x0000);
-  prv_write(MDCDISPPRM109, 0x0301);
-  prv_write(MDCDISPPRM1211, 0x0302);
-  prv_write(MDCDISPPRM1413, 0x003);
+  // wipe screen
+  display_clear();
+  prv_update_command();
 
-  prv_write(MDCDISPFRMBUFF0, 0x0000);
-  prv_write(MDCDISPFRMBUFF1, 0x0000);
+  psleep(1);
+  
+  // enable VCOM, VB, VA
+  prv_write(MDCDISPCTL, DISPGS_0+DISPINVERT+DISPSPI_0+ROTSEL_NONE+VCOMEN+DISPEPD_0);
 
-  prv_write(MDCDISPCTL, 0x0000); // use this to enable VCOM to calulate values correctly...
-  prv_write(MDCDISPCTL2, 0x0001);
+  // print screen purple
+  prv_display_clear(0xf3);
+  prv_update_command();
 
-  prv_write(MDCGFXOBADDR0, 0x0000);
-  prv_write(MDCGFXOBADDR1, 0x0000);
-
-  prv_write(MDCGFXOWIDTH, PBL_DISPLAY_WIDTH);
-  prv_write(MDCGFXOHEIGHT, PBL_DISPLAY_HEIGHT);
-  prv_write(MDCGFXOSTRIDE, 100);
-
-
-
-
-
-
-
-
-
-
+  stable = prv_read(SYSCTRL) & IOSC_STABLE;
   if(stable == 0) {
     psleep(1);
     stable = prv_read(SYSCTRL) & IOSC_STABLE;
@@ -495,25 +566,121 @@ void display_init(void) {
   }
 }
 
-void display_clear(void) {
-  uint8_t buf[] = {DISP_MODE_CLEAR, 0x00};
-  nrfx_spim_xfer_desc_t desc = {.p_tx_buffer = buf, .tx_length = sizeof(buf)};
+void display_clear() {
 
   PBL_ASSERTN(!s_updating);
 
-  prv_enable_spim();
-  prv_enable_chip_select();
+  // config
+  prv_write(MDCGFXIXCENTER, 0x0);
+  prv_write(MDCGFXIYCENTER, 0x0);
+  prv_write(MDCGFXOXCENTER, 280-1);
+  prv_write(MDCGFXOYCENTER, 280-1);
+  prv_write(MDCGFXCOLOR, 0xC0); // colour
+  prv_write(MDCGFXIWIDTH, 0x0);
+  prv_write(MDCGFXIHEIGHT, 0x0);
+  prv_write(MDCGFXCTL, (1<<11));
 
-  nrfx_err_t err = nrfx_spim_xfer(&BOARD_CONFIG_DISPLAY.spi, &desc, 0);
-  PBL_ASSERTN(err == NRFX_SUCCESS);
-  xSemaphoreTake(s_sem, portMAX_DELAY);
+  uint16_t intctl = prv_read(MDCINTCTL);
+  prv_write(MDCINTCTL, intctl|(GFXIE+GFXIF)); // clear interrupt
 
-  prv_disable_chip_select();
-  prv_disable_spim();
+  uint16_t gfxctl = prv_read(MDCGFXCTL);
+  prv_write(MDCGFXCTL, gfxctl|0x2); // draw rectangle
+
+  uint16_t trigctl = prv_read(MDCTRIGCTL);
+  prv_write(MDCTRIGCTL, trigctl|(GFXTRIG));
+
+  // wait for GXFTRIG bit to be cleared...
+  // ## wait for up to 250 ms for GFXTRIG to go to 0
+  for(uint8_t i=0; i<25; i++) {
+    trigctl = prv_read(GFXTRIG);
+
+    if ((trigctl && UPDTRIG) == 0) {
+      break; // display update finished...
+    } else {
+      psleep(10);
+    }
+  }
+
+  // cleanup
+  intctl = prv_read(MDCINTCTL);
+  prv_write(MDCINTCTL, intctl|(GFXIE+GFXIF)); // clear interrupt
+}
+
+void prv_display_clear(uint8_t colour) {
+
+  PBL_ASSERTN(!s_updating);
+
+  // config
+  prv_write(MDCGFXIXCENTER, 0x0);
+  prv_write(MDCGFXIYCENTER, 0x0);
+  prv_write(MDCGFXOXCENTER, 280-1);
+  prv_write(MDCGFXOYCENTER, 280-1);
+  prv_write(MDCGFXCOLOR, colour); // colour
+  prv_write(MDCGFXIWIDTH, 0x0);
+  prv_write(MDCGFXIHEIGHT, 0x0);
+  prv_write(MDCGFXCTL, (1<<11));
+
+  uint16_t intctl = prv_read(MDCINTCTL);
+  prv_write(MDCINTCTL, intctl|(GFXIE+GFXIF)); // clear interrupt
+
+  uint16_t gfxctl = prv_read(MDCGFXCTL);
+  prv_write(MDCGFXCTL, gfxctl|0x2); // draw rectangle
+
+  uint16_t trigctl = prv_read(MDCTRIGCTL);
+  prv_write(MDCTRIGCTL, trigctl|(GFXTRIG));
+
+  // wait for GXFTRIG bit to be cleared...
+  // ## wait for up to 250 ms for GFXTRIG to go to 0
+  for(uint8_t i=0; i<25; i++) {
+    trigctl = prv_read(GFXTRIG);
+
+    if ((trigctl && UPDTRIG) == 0) {
+      break; // display update finished...
+    } else {
+      psleep(10);
+    }
+  }
+
+  // cleanup
+  intctl = prv_read(MDCINTCTL);
+  prv_write(MDCINTCTL, intctl|(GFXIE+GFXIF)); // clear interrupt
 }
 
 void display_set_enabled(bool enabled) {
   // gpio_output_set(&BOARD_CONFIG_DISPLAY.on_ctrl, enabled);
+}
+
+void prv_update_command() {
+  // ## Tell the driver IC to update the display
+
+  uint16_t pwr = prv_read(MDCBSTPWR);
+  prv_write(MDCBSTPWR, (VMDBUP+BSTON+REGON)); // speed up VMD response
+
+  // TODO: implement a modify register func...
+  uint16_t intctl = prv_read(MDCINTCTL);
+  prv_write(MDCINTCTL, intctl|(UPDIE+UPDIF)); // clear interrupt
+
+  uint16_t trig = prv_read(MDCTRIGCTL);
+  prv_write(MDCTRIGCTL, trig|(UPDTRIG));
+
+  // ## wait for up to 250 ms for trig to go to 0
+  for(uint8_t i=0; i<25; i++) {
+    trig = prv_read(MDCTRIGCTL);
+
+    if ((trig && UPDTRIG) == 0) {
+      break; // display update finished...
+    } else {
+      psleep(10);
+    }
+  }
+
+  // ## cleanup
+  intctl = prv_read(MDCINTCTL);
+  prv_write(MDCINTCTL, intctl|(UPDIE+UPDIF)); // clear interrupt
+
+  pwr = prv_read(MDCBSTPWR);
+  prv_write(MDCBSTPWR, (BSTON+REGECO+REGON)); // turn on economy mode
+
 }
 
 void display_update(NextRowCallback nrcb, UpdateCompleteCallback uccb) {
@@ -523,52 +690,57 @@ void display_update(NextRowCallback nrcb, UpdateCompleteCallback uccb) {
 
   PBL_ASSERTN(!s_updating);
 
+  // ## Fill the memory buffer on driver IC
   // write command (write)
-  *pbuf++ = DISP_MODE_WRITE;
-  desc.tx_length++;
+  *pbuf++ = PAGEPROG;
+  *pbuf++ = (RAM_START >> 24) & 0xff;
+  *pbuf++ = (RAM_START >> 16) & 0xff;
+  *pbuf++ = (RAM_START >> 8)  & 0xff;
+  *pbuf++ = RAM_START & 0xff;
+  desc.tx_length += 5; // 1 command byte + 4 address bytes
 
   while (nrcb(&row)) {
     // write row address, data and trailing dummy
-    *pbuf++ = row.address + 1;
+    // *pbuf++ = row.address + 1;
     memcpy(pbuf, row.data, DISP_LINE_BYTES);
-    pbuf += DISP_LINE_BYTES;
-    *pbuf++ = 0x00;
+    // pbuf += DISP_LINE_BYTES;
+    // *pbuf++ = 0x00;
 
-    desc.tx_length += DISP_LINE_BYTES + 2;
+    // desc.tx_length += DISP_LINE_BYTES + 2;
+    desc.tx_length += DISP_LINE_BYTES;
   }
 
   // write last trailing dummy
-  *pbuf++ = 0x00;
+  // *pbuf++ = 0x00;
   desc.tx_length++;
 
+  prv_read(SYSCTRL);
+  prv_read(SYSINTS);
+
   prv_enable_spim();
+  prv_disable_chip_select();
   prv_enable_chip_select();
-
-  s_uccb = uccb;
-  s_updating = true;
-
+  
+  // s_uccb = uccb;
+  // s_updating = true;
   nrfx_err_t err = nrfx_spim_xfer(&BOARD_CONFIG_DISPLAY.spi, &desc, 0);
   PBL_ASSERTN(err == NRFX_SUCCESS);
+  xSemaphoreTake(s_sem, portMAX_DELAY);
+
+  prv_disable_chip_select();
+  prv_disable_spim();
+
+  prv_update_command();
 }
 
 bool display_update_in_progress(void) {
   return s_updating;
 }
 
-// wanna get something like a flash driver working over the spi. We can maybe use the nrf5/spi
-// driver that already exists. First steps are to read and write to the control registers of 
-// the display driver ic. Mainly care about speed for writing big buffer which is same as before
-// , this is just to verify I can read/write to the ic.
-
-
-
 // (cmd[7:0]) (addr[31:0]) (data[7:0])...
 
 // 16 bit addressing/registers
 uint16_t prv_read(unsigned long address) {
-
-  prv_enable_spim();
-  prv_enable_chip_select();
 
   size_t len = 8;
   uint8_t *bob = out_buf;
@@ -591,19 +763,23 @@ uint16_t prv_read(unsigned long address) {
   xfer.tx_length = len;
   xfer.p_rx_buffer = in;
   xfer.rx_length = len;
-  
-  nrfx_err_t rv = nrfx_spim_xfer(&BOARD_CONFIG_DISPLAY.spi, &xfer, 0); // FIXME: currently disabling interrupts, need to turn back on...
-  PBL_ASSERTN(rv == NRFX_SUCCESS);
 
-  return ((in[0] << 8) + (in[1]));
+  prv_enable_spim();
+  prv_enable_chip_select();
+  
+  nrfx_err_t rv = nrfx_spim_xfer(&BOARD_CONFIG_DISPLAY.spi, &xfer, 0);
+  PBL_ASSERTN(rv == NRFX_SUCCESS);
+  xSemaphoreTake(s_sem, portMAX_DELAY);
+
+  prv_disable_chip_select();
+  prv_disable_spim();
+
+  return ((in[7] << 8) + (in[6]));
 }
 
 
 // TODO: burst write... don't have time now :(
 void prv_write(unsigned long address, uint16_t value) {
-
-  prv_enable_spim();
-  prv_enable_chip_select();
 
   size_t len = 7;
   uint8_t *bob = out_buf;
@@ -624,9 +800,16 @@ void prv_write(unsigned long address, uint16_t value) {
   xfer.tx_length = len;
   xfer.p_rx_buffer = in;
   xfer.rx_length = len;
-  
-  nrfx_err_t rv = nrfx_spim_xfer(&BOARD_CONFIG_DISPLAY.spi, &xfer, 0); // FIXME: currently disabling interrupts, need to turn back on...
+
+  prv_enable_spim();
+  prv_enable_chip_select();
+
+  nrfx_err_t rv = nrfx_spim_xfer(&BOARD_CONFIG_DISPLAY.spi, &xfer, 0);
   PBL_ASSERTN(rv == NRFX_SUCCESS);
+  xSemaphoreTake(s_sem, portMAX_DELAY);
+  
+  prv_disable_chip_select();
+  prv_disable_spim();
 }
 
 /* stubs */
